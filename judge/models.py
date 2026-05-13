@@ -94,6 +94,7 @@ class TestCaseResult:
     passed: bool
     execution_time: float
     verdict: Verdict
+    earned_fraction: float = 1.0
     error_message: Optional[str] = None
 
 
