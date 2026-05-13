@@ -57,6 +57,68 @@ class TestOutputChecker:
         assert not passed
         assert "missing line" in msg
 
+    def test_er_structural_ignores_names_and_checks_counts(self):
+        expected = """
+entity Employee {
+    e_id key
+    name
+}
+
+entity Department {
+    d_id key
+    d_name
+}
+
+relation Works_for(Employee N, Department 1!)
+"""
+        actual = """
+entity Persona {
+    id key
+    full_name
+}
+
+entity Area {
+    code key
+    label
+}
+
+relation Pertenece(Persona N, Area 1!)
+"""
+        passed, msg, score = self.checker.check_er_structural(actual, expected)
+        assert passed
+        assert msg == ""
+        assert score == pytest.approx(1.0)
+
+    def test_er_structural_weighted_penalty(self):
+        expected = """
+entity Employee {
+    e_id key
+    name
+}
+
+entity Department {
+    d_id key
+    d_name
+}
+
+relation Works_for(Employee N, Department 1!)
+"""
+        actual = """
+entity Employee {
+    e_id
+    name
+}
+
+entity Department {
+    d_id key
+    d_name
+}
+"""
+        passed, msg, score = self.checker.check_er_structural(actual, expected)
+        assert not passed
+        assert "weighted_score" in msg
+        assert 0.0 < score < 1.0
+
 
 # ---------------------------------------------------------------------------
 # CodeRunner tests
@@ -133,7 +195,7 @@ class TestRuleEngine:
 
     def test_erdoc_valid_minimal(self):
         engine = RuleEngine(ERDOC_GUIDELINES)
-        source = "entity Person { key ssn }\nrelationship Knows { }"
+        source = "entity Person { key ssn }\nrelation Knows(Person N, Person M)"
         results = engine.evaluate(source)
         assert not engine.has_required_violations(results)
 
@@ -244,6 +306,23 @@ class TestJudge:
         judge = Judge(parameters=params, check_strategy="token")
         result = judge.judge("print('1  2  3')")
         assert result.verdict == Verdict.CORRECT
+
+    def test_er_structural_check_strategy_partial_score(self):
+        expected = (
+            "entity Employee { e_id key name }\n"
+            "entity Department { d_id key d_name }\n"
+            "relation Works_for(Employee N, Department 1!)"
+        )
+        actual = (
+            "entity Employee { e_id key name }\n"
+            "entity Department { d_id d_name }\n"
+            "relation Works_for(Employee N, Department 1!)"
+        )
+        params = self._make_params([TestCase(input_data="", expected_output=expected)])
+        judge = Judge(parameters=params, check_strategy="er_structural")
+        result = judge.judge(f"print({actual!r})")
+        assert result.verdict == Verdict.PARTIAL
+        assert 0.0 < result.score < 1.0
 
     def test_custom_guideline_integrated(self):
         def _no_print(source):

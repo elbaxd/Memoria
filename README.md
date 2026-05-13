@@ -62,7 +62,7 @@ collections are exported:
 
 - **`DEFAULT_GUIDELINES`** — non-empty submission, line-length check.
 - **`ERDOC_GUIDELINES`** — extends the defaults with ER-model rules
-  (requires at least one `entity` and one `relationship`, unique entity names,
+  (requires at least one `entity` and one `relation`/`relationship`, unique entity names,
   key attributes present).
 
 Custom guidelines can be added with `make_guideline()`:

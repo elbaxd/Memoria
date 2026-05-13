@@ -74,6 +74,48 @@ class OutputChecker:
             return True, ""
         return False, f"Missing expected lines: {missing}"
 
+    def check_er_structural(self, actual: str, expected: str) -> Tuple[bool, str, float]:
+        """Compare ER-model texts by structural counts, independent from names.
+
+        Evaluates four dimensions:
+        - entities
+        - relationships (``relation`` or ``relationship``)
+        - attributes
+        - primary keys (``key``/``pkey``)
+
+        Returns ``(passed, message, score)`` where *score* is in ``[0, 1]`` and
+        uses weighted penalties by conceptual importance.
+        """
+        actual_m = self._extract_er_metrics(actual)
+        expected_m = self._extract_er_metrics(expected)
+
+        weights = {
+            "entities": 0.35,
+            "relationships": 0.30,
+            "primary_keys": 0.25,
+            "attributes": 0.10,
+        }
+
+        per_dim_score = {
+            key: self._count_similarity(actual_m[key], expected_m[key])
+            for key in weights
+        }
+        score = sum(weights[key] * per_dim_score[key] for key in weights)
+
+        exact_match = all(actual_m[k] == expected_m[k] for k in weights)
+        if exact_match:
+            return True, "", 1.0
+
+        return (
+            False,
+            (
+                "ER structural mismatch. "
+                f"Expected={expected_m}, Got={actual_m}, "
+                f"weighted_score={score:.3f}"
+            ),
+            score,
+        )
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -82,3 +124,64 @@ class OutputChecker:
     def _normalise(text: str) -> str:
         """Collapse all whitespace runs to single spaces and strip edges."""
         return re.sub(r"\s+", " ", text.strip())
+
+    @staticmethod
+    def _count_similarity(actual_count: int, expected_count: int) -> float:
+        if expected_count == 0:
+            return 1.0 if actual_count == 0 else 0.0
+        gap = abs(actual_count - expected_count) / expected_count
+        return max(0.0, 1.0 - gap)
+
+    def _extract_er_metrics(self, text: str) -> dict[str, int]:
+        clean = self._strip_comments(text)
+        entity_blocks = re.findall(
+            r"\bentity\s+\w+(?:\s+(?:extends|depends\s+on)\s+\w+)?\s*\{(.*?)\}",
+            clean,
+            re.IGNORECASE | re.DOTALL,
+        )
+        relationship_blocks = re.findall(
+            r"\b(?:relation|relationship)\s+\w+\s*\([^)]*\)\s*\{(.*?)\}",
+            clean,
+            re.IGNORECASE | re.DOTALL,
+        )
+        entity_count = len(
+            re.findall(
+                r"^\s*entity\s+\w+(?:\s+(?:extends|depends\s+on)\s+\w+)?\s*\{",
+                clean,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        )
+        relationship_count = len(
+            re.findall(
+                r"^\s*(?:relation|relationship)\s+\w+\s*\(",
+                clean,
+                re.IGNORECASE | re.MULTILINE,
+            )
+        )
+
+        all_attribute_lines = []
+        for block in entity_blocks + relationship_blocks:
+            for raw_line in block.splitlines():
+                line = raw_line.strip()
+                if line:
+                    all_attribute_lines.append(line)
+
+        primary_keys = sum(
+            1 for line in all_attribute_lines if re.search(r"\b(?:key|pkey)\b", line, re.IGNORECASE)
+        )
+
+        return {
+            "entities": entity_count,
+            "relationships": relationship_count,
+            "attributes": len(all_attribute_lines),
+            "primary_keys": primary_keys,
+        }
+
+    @staticmethod
+    def _strip_comments(text: str) -> str:
+        cleaned_lines = []
+        for line in text.splitlines():
+            line = re.sub(r"//.*$", "", line)
+            line = re.sub(r"#.*$", "", line)
+            cleaned_lines.append(line)
+        return "\n".join(cleaned_lines)

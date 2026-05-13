@@ -81,10 +81,10 @@ def _check_has_entity(source: str) -> Tuple[bool, str]:
 
 
 def _check_has_relationship(source: str) -> Tuple[bool, str]:
-    """At least one ``relationship`` declaration must be present."""
-    if re.search(r"\brelationship\b", source, re.IGNORECASE):
+    """At least one ``relation``/``relationship`` declaration must be present."""
+    if re.search(r"\b(?:relation|relationship)\b", source, re.IGNORECASE):
         return True, ""
-    return False, "No 'relationship' declaration found in the ER model."
+    return False, "No 'relation' or 'relationship' declaration found in the ER model."
 
 
 def _check_entity_has_key(source: str) -> Tuple[bool, str]:

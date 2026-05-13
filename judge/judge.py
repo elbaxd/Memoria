@@ -40,7 +40,8 @@ class Judge:
         Ordered list of :class:`~judge.models.Guideline` objects.  When
         ``None`` the :data:`~judge.rules.DEFAULT_GUIDELINES` are used.
     check_strategy:
-        One of ``"exact"`` (default), ``"token"``, or ``"contains"``.
+        One of ``"exact"`` (default), ``"token"``, ``"contains"``, or
+        ``"er_structural"``.
         Controls how actual output is compared to expected output.
     """
 
@@ -145,14 +146,23 @@ class Judge:
             "token": self._checker.check_token,
             "contains": self._checker.check_contains,
         }.get(self.check_strategy, self._checker.check_exact)
+        earned_fraction = 1.0
+        if self.check_strategy == "er_structural":
+            passed, msg, earned_fraction = self._checker.check_er_structural(
+                run_result.stdout,
+                tc.expected_output,
+            )
+        else:
+            passed, msg = checker_fn(run_result.stdout, tc.expected_output)
+            earned_fraction = 1.0 if passed else 0.0
 
-        passed, msg = checker_fn(run_result.stdout, tc.expected_output)
         return TestCaseResult(
             test_case=tc,
             actual_output=run_result.stdout,
             passed=passed,
             execution_time=run_result.execution_time,
             verdict=Verdict.CORRECT if passed else Verdict.WRONG_ANSWER,
+            earned_fraction=earned_fraction,
             error_message=msg if not passed else None,
         )
 
@@ -163,7 +173,7 @@ class Judge:
         if total_weight == 0:
             return 0.0
         earned = sum(
-            r.test_case.weight for r in results if r.passed
+            r.test_case.weight * max(0.0, min(1.0, r.earned_fraction)) for r in results
         )
         return earned / total_weight
 
